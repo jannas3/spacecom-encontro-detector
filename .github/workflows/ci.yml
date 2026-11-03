@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Verificação estática
+        run: npm run lint
+      - name: Testes (os gabaritos oficiais não ficam no repositório; a regressão é pulada)
+        run: npm test
+      - name: Benchmark grade x força bruta
+        run: npm run benchmark -- --pessoas=1000 --timestamps=3 --sem-log

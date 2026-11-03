@@ -1,0 +1,23 @@
+{
+  "name": "spacecom-detector-encontros",
+  "version": "2.0.0",
+  "description": "Detecção de encontros entre monitorados (genérico, facção e medida protetiva) - Desafio Trainee Tech Spacecom 2027",
+  "main": "src/core/detector.js",
+  "scripts": {
+    "start": "node src/cli/rodar-todos.js dados saida",
+    "process:all": "node src/cli/rodar-todos.js dados saida",
+    "detect": "node src/cli/detectar.js",
+    "validate": "node src/cli/validar.js --todos dados saida",
+    "benchmark": "node src/cli/benchmark.js",
+    "test": "node test/executar.js",
+    "test:performance": "node test/executar.js performance",
+    "test:all": "node test/executar.js todos",
+    "lint": "node scripts/verificar.js",
+    "verify": "node scripts/verificar.js && node test/executar.js && node src/cli/validar.js --todos dados saida"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "author": "Janaina dos Santos Ferreira",
+  "license": "MIT"
+}

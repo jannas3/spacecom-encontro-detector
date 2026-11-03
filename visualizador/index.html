@@ -1,0 +1,1545 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Detector de Encontros</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: coluna única de leitura; cada seção tem um rótulo à esquerda (empilha no celular).
+   A demo ao vivo abre a página; a análise de dados reais fica no fim, como ferramenta. */
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --ink: #14202e;
+  --muted: #56636f;
+  --line: #cbd3dc;
+  --accent: #c94812;
+  --gen: #3a67aa;
+  --fac: #94600f;
+  --pro: #bf2337;
+  --ok: #24774a;
+  --warn: #8a5a00;
+  --tint: rgba(20, 32, 46, 0.05);
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #17202a; --ink: #e6ecf2; --muted: #9aa8b6; --line: #2d3a48;
+    --accent: #ff7a3d; --gen: #78a3e6; --fac: #e3aa45; --pro: #f2606f; --ok: #55c98f; --warn: #e8b64c;
+    --tint: rgba(230, 236, 242, 0.06); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #17202a; --ink: #e6ecf2; --muted: #9aa8b6; --line: #2d3a48;
+  --accent: #ff7a3d; --gen: #78a3e6; --fac: #e3aa45; --pro: #f2606f; --ok: #55c98f; --warn: #e8b64c;
+  --tint: rgba(230, 236, 242, 0.06); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 64px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: clamp(2.4rem, 6vw, 4.2rem); font-weight: 800; font-stretch: 78%; letter-spacing: -0.01em; }
+h2 { font-size: 1.75rem; font-weight: 700; font-stretch: 85%; }
+h3 { font-size: 1.15rem; font-weight: 700; font-stretch: 90%; }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--f-mono); font-size: 0.9em; }
+.eyebrow { font-family: var(--f-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lead { font-size: 1.15rem; color: var(--muted); }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fonte { font-size: 0.84rem; color: var(--muted); }
+
+.hero { display: grid; gap: 20px; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+
+/* Painéis com mapa */
+.painel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 320px; }
+.painel canvas { display: block; width: 100%; height: auto; background: var(--surface); touch-action: none; }
+.area-mapa { position: relative; min-width: 0; }
+.selo { position: absolute; top: 10px; left: 10px; font: 600 0.72rem var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.selo.simulacao { color: var(--warn); border-color: currentColor; }
+.selo.real { color: var(--ok); border-color: currentColor; }
+.zoom { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; }
+.zoom button { min-width: 34px; padding: 4px 8px; background: var(--surface); }
+.lado { border-left: 1px solid var(--line); padding: 18px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.relogio { font-family: var(--f-mono); font-size: 1.05rem; font-weight: 500; overflow-wrap: anywhere; }
+.stats { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 0.9rem; margin: 0; }
+.stats dt { color: var(--muted); }
+.stats dd { margin: 0; font-family: var(--f-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.stats .destaque { color: var(--accent); font-weight: 500; }
+.controles { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, .botao {
+  font: 500 0.88rem var(--f-body); color: var(--ink); background: var(--tint);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer;
+}
+button:hover, .botao:hover { border-color: var(--muted); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primario { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 0.88rem; cursor: pointer; }
+.lista-enc { display: grid; gap: 6px; font-size: 0.84rem; max-height: 180px; overflow-y: auto; }
+.legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--muted); padding: 10px 14px; border-top: 1px solid var(--line); grid-column: 1 / -1; align-items: center; }
+.legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.traco { width: 22px; height: 0; display: inline-block; border-top: 2px solid currentColor; }
+.traco.generico { color: var(--gen); }
+.traco.faccao { color: var(--fac); border-top-style: dashed; }
+.traco.protetiva { color: var(--pro); border-top-width: 4px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--ink); }
+.ring { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 2px solid var(--pro); }
+
+/* Chips de tipo: texto + cor + estilo de borda (não depende só da cor) */
+.chip { display: inline-block; font: 500 0.74rem var(--f-mono); padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.chip.generico { color: var(--gen); }
+.chip.faccao { color: var(--fac); border-style: dashed; }
+.chip.protetiva { color: var(--pro); border-width: 2px; font-weight: 600; }
+
+/* Seções */
+.secao { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 16px 40px; border-top: 1px solid var(--line); padding-top: 28px; }
+.secao > .rotulo { display: grid; gap: 6px; align-content: start; }
+.secao > .corpo { display: grid; gap: 20px; min-width: 0; }
+
+.linha-csv { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; font-family: var(--f-mono); font-size: 0.82rem; line-height: 1.7; white-space: pre; }
+.linha-csv .c { color: var(--muted); }
+
+.tipos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.tipo { padding: 16px; border: 1px solid var(--line); border-top: 3px solid var(--c); border-radius: 8px; background: var(--surface); display: grid; gap: 8px; align-content: start; }
+.tipo .prio { font-family: var(--f-mono); font-size: 0.75rem; color: var(--muted); }
+.tipo p { font-size: 0.92rem; }
+
+.passos { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: p; }
+.passos li { counter-increment: p; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 14px; padding: 14px 0; border-bottom: 1px dashed var(--line); }
+.passos li:last-child { border-bottom: 0; }
+.passos li::before { content: counter(p); font: 700 1.5rem/1 var(--f-display); font-stretch: 80%; color: var(--accent); padding-top: 2px; }
+.passos h3 { margin-bottom: 4px; }
+.passos p { font-size: 0.95rem; color: var(--muted); }
+
+.calc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+.campos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-content: start; }
+.campos .grupo { grid-column: 1 / -1; font-weight: 600; font-size: 0.9rem; margin-top: 4px; }
+label.campo { display: grid; gap: 3px; font-size: 0.8rem; color: var(--muted); }
+input[type="number"], input[type="text"], input[type="search"], select { font: 0.92rem var(--f-mono); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; min-width: 0; }
+.conta { font-family: var(--f-mono); font-size: 0.84rem; display: grid; gap: 4px; align-content: start; min-width: 0; overflow-x: auto; }
+.conta .res { font-family: var(--f-display); font-size: clamp(1.4rem, 3.2vw, 1.9rem); font-weight: 800; font-stretch: 80%; margin-top: 8px; overflow-wrap: anywhere; }
+.veredito { font: 600 0.9rem var(--f-body); }
+.veredito.sim { color: var(--ok); }
+.veredito.nao { color: var(--muted); }
+
+.tabela-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+caption { text-align: left; padding: 10px 14px; font-size: 0.84rem; color: var(--muted); }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font: 500 0.75rem var(--f-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.ok { color: var(--ok); font-weight: 600; }
+tfoot td { font-weight: 600; border-top: 1px solid var(--line); }
+
+/* Gráficos */
+.graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.grafico { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.grafico h3 { font-size: 1rem; }
+.grafico svg { width: 100%; height: auto; display: block; overflow: visible; }
+.grafico .nota { font-size: 0.78rem; color: var(--muted); }
+svg text { font-family: var(--f-mono); }
+
+/* Indicadores */
+.indicadores { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.ind { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; align-content: start; min-width: 0; }
+.ind .v { font: 700 1.35rem var(--f-display); font-stretch: 85%; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ind .r { font-size: 0.78rem; color: var(--muted); }
+.ind .o { font-size: 0.72rem; color: var(--muted); font-family: var(--f-mono); }
+.ind.generico .v { color: var(--gen); }
+.ind.faccao .v { color: var(--fac); }
+.ind.protetiva .v { color: var(--pro); }
+
+.evid { display: grid; gap: 14px; }
+.evid > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.nivel { font: 600 0.8rem var(--f-mono); }
+.nivel.alta { color: var(--ok); }
+.nivel.media { color: var(--fac); }
+.evid p { font-size: 0.94rem; }
+.aviso { padding: 14px 16px; border-left: 3px solid var(--fac); background: var(--tint); border-radius: 0 8px 8px 0; font-size: 0.94rem; }
+
+/* Carregamento */
+.drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 12px; }
+.drop.ativo { border-color: var(--accent); background: var(--tint); }
+.carregar input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.progresso { height: 6px; border-radius: 3px; background: var(--tint); overflow: hidden; }
+.progresso > div { height: 100%; width: 0; background: var(--accent); transition: width 0.15s; }
+.arquivos { display: grid; gap: 4px; font-size: 0.86rem; }
+.arquivos div { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.mensagens { display: grid; gap: 6px; font-size: 0.88rem; }
+.msg { padding: 8px 12px; border-radius: 6px; border-left: 3px solid var(--muted); background: var(--tint); }
+.msg.erro { border-color: var(--pro); }
+.msg.aviso { border-color: var(--warn); }
+.msg.ok { border-color: var(--ok); }
+.msg ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* Filtros */
+.filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 12px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+.filtros fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; grid-column: 1 / -1; }
+.filtros legend { font-size: 0.8rem; color: var(--muted); padding: 0; margin-bottom: 4px; }
+.paginacao { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-size: 0.88rem; }
+#tab-enc tbody tr { cursor: pointer; }
+#tab-enc tbody tr:hover td { background: var(--tint); }
+#tab-enc tbody tr[aria-selected="true"] td { background: var(--tint); box-shadow: inset 0 -2px 0 var(--accent); }
+.perfil { font-size: 0.84rem; display: grid; gap: 2px; }
+.perfil b { font-family: var(--f-mono); font-weight: 500; }
+.vazio { color: var(--muted); font-size: 0.9rem; }
+
+footer { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 20px; }
+
+@media (max-width: 900px) {
+  .painel { grid-template-columns: 1fr; }
+  .lado { border-left: 0; border-top: 1px solid var(--line); }
+  .secao { grid-template-columns: 1fr; }
+  .tipos { grid-template-columns: 1fr; }
+  .calc { grid-template-columns: 1fr; }
+  .evid > div { grid-template-columns: 1fr; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { padding-block: 0; }
+  .controles, .zoom, .drop, .filtros, .paginacao { display: none; }
+  .lista-enc { max-height: none; overflow: visible; }
+  .linha-csv { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .tabela-wrap { overflow: visible; }
+  .wrap, .secao, .secao > .corpo, .tipos, .evid { display: block; }
+  .wrap > * { margin-bottom: 40px; }
+  .secao > .rotulo, .secao > .corpo > *, .tipos > .tipo, .evid > div { margin-bottom: 16px; }
+  .tipo, .calc, .evid > div, .passos li, .aviso, tr, canvas, .grafico, .ind { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Desafio Trainee Tech Spacecom 2027 · Janaina dos Santos Ferreira</div>
+    <h1>Quem esteve a menos de <em>20&nbsp;m</em> de quem, no mesmo segundo?</h1>
+    <p class="lead">Tornozeleiras e rastreadores mandam uma posição a cada 5 segundos. O algoritmo lê milhões dessas posições e acha cada encontro entre duas pessoas: genérico, entre membros da mesma facção, ou de um agressor com a vítima que tem medida protetiva contra ele.</p>
+
+    <div class="painel" aria-label="Simulação de detecção de encontros">
+      <div class="area-mapa">
+        <canvas id="mapa" width="780" height="468" role="img" aria-label="Simulação: pessoas fictícias se movendo e encontros destacados"></canvas>
+        <span class="selo simulacao">Simulação · dados fictícios</span>
+      </div>
+      <div class="lado">
+        <div>
+          <div class="eyebrow">Timestamp simulado</div>
+          <div class="relogio" id="relogio">2024-01-01 00:00:00</div>
+        </div>
+        <dl class="stats">
+          <dt>Posições neste timestamp</dt><dd id="s-n">30</dd>
+          <dt>Pares se comparar todos</dt><dd id="s-bruta">435</dd>
+          <dt>Pares checados com a grade</dt><dd id="s-grade" class="destaque">0</dd>
+          <dt>Encontros</dt><dd id="s-enc">0</dd>
+        </dl>
+        <div class="controles">
+          <button id="b-play" type="button">Pausar</button>
+          <button id="b-passo" type="button">Próximo timestamp</button>
+          <label class="check"><input type="checkbox" id="c-grade" checked> Grade de 25 m</label>
+        </div>
+        <div>
+          <div class="eyebrow" style="margin-bottom:6px">Encontros neste timestamp</div>
+          <div class="lista-enc" id="lista-enc" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="legenda">
+        <span><i class="dot"></i> monitorado</span>
+        <span><i class="ring"></i> vítima</span>
+        <span><i class="traco generico"></i> genérico</span>
+        <span><i class="traco faccao"></i> facção</span>
+        <span><i class="traco protetiva"></i> protetiva</span>
+        <span>30 pessoas inventadas numa área de 300 × 180 m, geradas no navegador. Não é dado de nenhum dataset.</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="secao">
+    <div class="rotulo"><div class="eyebrow">O problema</div><h2>O que entra</h2></div>
+    <div class="corpo">
+      <p>Cada linha do arquivo é a posição de uma pessoa num instante. Os campos são separados por ponto e vírgula; o maior dataset tem 12 milhões de linhas (638 MB). As linhas abaixo são reais, do <code>dataset1.txt</code>:</p>
+      <div class="linha-csv"><span class="c">idMonitorado;faccaoMonitorado;timestamp;latitude;longitude;medidaProtetiva;idsRestricaoMedida</span>
+7;1;"2024-01-01 00:36:00";-13.02054;-46.40609;false;        <span class="c">← monitorado da facção 1</span>
+8;1;"2024-01-01 00:36:00";-13.02046;-46.40609;false;        <span class="c">← outro da facção 1, mesmo segundo: faccao, 8,9 m</span>
+9;;"2024-01-01 00:16:45";1.83355;-69.54610;true;"10"        <span class="c">← vítima com medida contra o 10</span>
+10;;"2024-01-01 00:16:45";1.83351;-69.54618;false;          <span class="c">← o agressor, no mesmo segundo: protetiva, 9,9 m</span></div>
+      <p>Só se comparam posições com <strong>exatamente o mesmo timestamp</strong>. Um encontro existe quando a distância é <strong>menor que 20 metros</strong>, calculada pela fórmula de Haversine com raio da Terra de 6.371.000&nbsp;m. Cada par aparece uma única vez por timestamp.</p>
+    </div>
+  </section>
+
+  <section class="secao">
+    <div class="rotulo"><div class="eyebrow">Classificação</div><h2>Os três tipos</h2></div>
+    <div class="corpo">
+      <div class="tipos">
+        <div class="tipo" style="--c:var(--pro)">
+          <span class="prio">verificado 1º</span>
+          <h3><span class="chip protetiva">protetiva</span></h3>
+          <p>Uma das pessoas é vítima e a outra está na lista de agressores dela. É o caso mais grave: indica violação da medida.</p>
+        </div>
+        <div class="tipo" style="--c:var(--fac)">
+          <span class="prio">verificado 2º</span>
+          <h3><span class="chip faccao">faccao</span></h3>
+          <p>Dois monitorados de tornozeleira com a mesma facção preenchida. Pode indicar articulação entre membros.</p>
+        </div>
+        <div class="tipo" style="--c:var(--gen)">
+          <span class="prio">verificado 3º</span>
+          <h3><span class="chip generico">generico</span></h3>
+          <p>Quaisquer dois monitorados de tornozeleira que não se encaixem nos casos acima.</p>
+        </div>
+      </div>
+      <p>Cada par recebe um único tipo, sempre o mais específico: um agressor que é de facção e encontra a própria vítima conta como <code>protetiva</code>. Nos mapas, além da cor, cada tipo tem um traço: contínuo (genérico), tracejado (facção) e grosso (protetiva).</p>
+    </div>
+  </section>
+
+  <section class="secao">
+    <div class="rotulo"><div class="eyebrow">A solução</div><h2>Como o algoritmo funciona</h2></div>
+    <div class="corpo">
+      <ol class="passos">
+        <li><div><h3>Lê o arquivo em blocos de 16 MB</h3><p>O parse é feito direto nos bytes, sem montar uma string gigante; por isso arquivos de mais de 512 MB funcionam. Linhas cortadas entre blocos, aspas, CRLF do Windows e BOM são tratados.</p></div></li>
+        <li><div><h3>Valida cada linha</h3><p>Timestamp no formato exato <code>YYYY-MM-DD HH:MM:SS</code>, latitude entre −90 e 90, longitude entre −180 e 180. Linha inválida não some em silêncio: é contada por motivo e aparece no relatório e no log.</p></div></li>
+        <li><div><h3>Agrupa por timestamp</h3><p>Com o arquivo ordenado por horário, cada segundo é processado assim que termina, e a memória fica em um grupo por vez. Se aparecer um horário fora de ordem, o código relê o arquivo guardando tudo em typed arrays e ordena com counting sort.</p></div></li>
+        <li><div><h3>Divide o mapa numa grade de 25 m</h3><p>Dois pontos a menos de 20 m sempre ficam na mesma célula ou em células vizinhas, então cada ponto só é comparado com a vizinhança. No dataset7, isso reduz 714 milhões de pares possíveis a 47 pares avaliados. Perto dos polos e da longitude ±180°, onde essa garantia falha, o grupo é comparado por força bruta.</p></div></li>
+        <li><div><h3>Descarta rápido quem está longe em latitude</h3><p>A distância nunca é menor que a diferença de latitude convertida em metros. Se só ela já passa de 20 m, o par sai sem nenhuma conta trigonométrica.</p></div></li>
+        <li><div><h3>Decide pelo Haversine</h3><p>A grade e o filtro só eliminam candidatos. Quem decide é sempre a fórmula de Haversine, com o limite estrito de &lt; 20 m e sem arredondar.</p></div></li>
+        <li><div><h3>Classifica, ordena e grava</h3><p>Aplica a prioridade protetiva, facção, genérico; ordena por timestamp e ids; grava o JSON de forma atômica, para que nunca fique um arquivo pela metade.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="secao">
+    <div class="rotulo"><div class="eyebrow">Experimente</div><h2>Calculadora de Haversine</h2></div>
+    <div class="corpo">
+      <p>Os valores iniciais são o exemplo do enunciado (pessoas 40 e 44). A calculadora usa a mesma fórmula do detector, que reproduz bit a bit as distâncias dos gabaritos oficiais: <code>11.406788673336607</code>.</p>
+      <div class="calc">
+        <div class="campos">
+          <span class="grupo">Pessoa A</span>
+          <label class="campo" for="lat1">Latitude<input type="number" id="lat1" step="0.00001" value="-10.07996"></label>
+          <label class="campo" for="lon1">Longitude<input type="number" id="lon1" step="0.00001" value="-37.08384"></label>
+          <span class="grupo">Pessoa B</span>
+          <label class="campo" for="lat2">Latitude<input type="number" id="lat2" step="0.00001" value="-10.07987"></label>
+          <label class="campo" for="lon2">Longitude<input type="number" id="lon2" step="0.00001" value="-37.08389"></label>
+        </div>
+        <div class="conta" id="conta" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="secao" id="resultados">
+    <div class="rotulo"><div class="eyebrow">Resultados</div><h2>Os 7 datasets</h2></div>
+    <div class="corpo">
+      <p class="fonte" id="res-fonte"></p>
+      <div class="graficos" id="res-graficos"></div>
+      <div class="tabela-wrap">
+        <table id="tab-res">
+          <caption>Uma linha por dataset oficial. "Pares avaliados" é quantos pares a grade mandou conferir; "Pares possíveis" é quantos a força bruta compararia.</caption>
+          <thead><tr><th>Dataset</th><th class="num">Linhas</th><th class="num">Pessoas</th><th class="num">Timestamps</th><th class="num">Encontros</th><th class="num">Pares possíveis</th><th class="num">Pares avaliados</th><th class="num">Tempo médio</th><th>Gabarito</th></tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="secao">
+    <div class="rotulo"><div class="eyebrow">Validação</div><h2>Como sei que está certo</h2></div>
+    <div class="corpo">
+      <div class="evid">
+        <div><span class="nivel alta">Gabarito oficial</span><p>Nos datasets 1 e 2, a saída é idêntica às respostas, campo a campo, inclusive a distância até o último dígito: 4 de 4 e 6 de 6, sem falso positivo, sem faltante, sem duplicação.</p></div>
+        <div><span class="nivel alta">Grade = força bruta</span><p>Testes automáticos e o benchmark comparam a grade com uma implementação ingênua (todos contra todos) em áreas densas, aglomerações, latitudes altas, polo e antimeridiano. Os encontros são sempre os mesmos.</p></div>
+        <div><span class="nivel alta">Fronteiras</span><p>Pares a 19,99 m entram, a 20,01 m não; pontos na borda exata de uma célula, ids invertidos, linhas duplicadas, arquivo fora de ordem e linhas cortadas entre blocos têm testes próprios.</p></div>
+        <div><span class="nivel media">Datasets 3 a 7</span><p>Sem gabarito público. Passam pelo mesmo código, e a versão atual produz os mesmos encontros da versão entregue antes, com os mesmos pares e tipos.</p></div>
+      </div>
+      <div class="aviso"><strong>Decisão de interpretação.</strong> Um encontro de uma vítima com alguém que não é o agressor dela não é registrado, porque o enunciado define o encontro genérico como “entre dois monitorados”. Essa leitura é compatível com os dois gabaritos. A opção <code>--incluir-vitimas</code> registra esses casos como genéricos, se a regra for outra.</div>
+    </div>
+  </section>
+
+  <section class="secao" id="analise">
+    <div class="rotulo"><div class="eyebrow">Dados reais</div><h2>Analisar um dataset</h2></div>
+    <div class="corpo">
+      <p>Abra o arquivo de posições (<code>dados/datasetN.txt</code>) e o de encontros (<code>saida/datasetN.json</code>) do mesmo dataset, um de cada vez, em qualquer ordem. A página junta os dois, confere cada encontro contra as posições, mostra indicadores e gráficos, e deixa filtrar e ver cada encontro no mapa. O botão de encontros também aceita o <code>relatorios/relatorio-execucao.json</code>, que atualiza a seção de resultados com os números da sua máquina.</p>
+      <div class="drop" id="drop">
+        <div class="controles carregar">
+          <label class="botao primario" for="arquivo-txt">1. Abrir posições (.txt)</label>
+          <input type="file" id="arquivo-txt" accept=".txt,text/plain">
+          <label class="botao primario" for="arquivo-json">2. Abrir encontros (.json)</label>
+          <input type="file" id="arquivo-json" accept=".json,application/json">
+          <button type="button" id="b-exemplo">Voltar ao exemplo</button>
+          <button type="button" id="b-limpar">Limpar</button>
+          <span class="fonte">Também dá para arrastar os arquivos para cá. Eles são lidos só neste navegador; nada é enviado para lugar nenhum.</span>
+        </div>
+        <div class="progresso" id="progresso" hidden><div></div></div>
+        <div class="arquivos" id="arquivos"></div>
+        <div class="mensagens" id="mensagens" aria-live="polite"></div>
+      </div>
+
+      <div class="indicadores" id="indicadores"></div>
+      <div class="graficos" id="graficos"></div>
+
+      <form class="filtros" id="filtros" aria-label="Filtros dos encontros">
+        <fieldset>
+          <legend>Tipos</legend>
+          <label class="check"><input type="checkbox" name="tipo" value="protetiva" checked> <span class="chip protetiva">protetiva</span></label>
+          <label class="check"><input type="checkbox" name="tipo" value="faccao" checked> <span class="chip faccao">faccao</span></label>
+          <label class="check"><input type="checkbox" name="tipo" value="generico" checked> <span class="chip generico">generico</span></label>
+        </fieldset>
+        <label class="campo" for="f-id">ID de uma pessoa<input type="search" id="f-id" inputmode="numeric" placeholder="ex.: 10"></label>
+        <label class="campo" for="f-ts">Timestamp começa com<input type="search" id="f-ts" placeholder="ex.: 2024-01-01 00:1"></label>
+        <label class="campo" for="f-dmin">Distância mín. (m)<input type="number" id="f-dmin" min="0" max="20" step="0.5" placeholder="0"></label>
+        <label class="campo" for="f-dmax">Distância máx. (m)<input type="number" id="f-dmax" min="0" max="20" step="0.5" placeholder="20"></label>
+        <label class="campo" for="f-ordem">Ordenar por
+          <select id="f-ordem">
+            <option value="cronologica">Cronológica</option>
+            <option value="dist-asc">Distância (menor primeiro)</option>
+            <option value="dist-desc">Distância (maior primeiro)</option>
+          </select>
+        </label>
+        <button type="reset" id="f-limpar">Limpar filtros</button>
+      </form>
+
+      <div class="painel" id="painel-real">
+        <div class="area-mapa">
+          <canvas id="mapa-real" width="780" height="468" role="img" tabindex="0" aria-label="Mapa do encontro selecionado"></canvas>
+          <span class="selo" id="selo-real"></span>
+          <div class="zoom" role="group" aria-label="Zoom do mapa">
+            <button type="button" id="z-mais" aria-label="Aproximar">+</button>
+            <button type="button" id="z-menos" aria-label="Afastar">−</button>
+            <button type="button" id="z-ajustar">Ajustar</button>
+          </div>
+        </div>
+        <div class="lado" id="lado-real"></div>
+        <div class="legenda">
+          <span><i class="dot"></i> monitorado</span>
+          <span><i class="ring"></i> vítima</span>
+          <span><i class="traco generico"></i> genérico</span>
+          <span><i class="traco faccao"></i> facção</span>
+          <span><i class="traco protetiva"></i> protetiva</span>
+          <span>Círculo tracejado: raio de 20 m em volta da primeira pessoa do par. Arraste para mover; use + e − ou a roda do mouse com Ctrl para o zoom.</span>
+        </div>
+      </div>
+
+      <div class="paginacao" id="paginacao"></div>
+      <div class="tabela-wrap">
+        <table id="tab-enc">
+          <caption id="tab-enc-legenda">Clique numa linha (ou use Enter) para ver o encontro no mapa.</caption>
+          <thead><tr><th>Posição relativa</th><th>Tipo</th><th class="num">Pessoa A</th><th class="num">Pessoa B</th><th>Timestamp</th><th class="num">Distância</th><th>Envolvidos</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ================= utilidades ================= */
+  const R = 6371000;
+  const RAD = Math.PI / 180;
+  const LIMITE = 20;
+  const M_LAT = R * RAD;
+  const paraRad = (g) => (g * Math.PI) / 180;
+  // mesma fórmula do detector (src/core/haversine.js)
+  const haversine = (lat1, lon1, lat2, lon2) => {
+    const dLat = paraRad(lat2 - lat1);
+    const dLon = paraRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(paraRad(lat1)) * Math.cos(paraRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = (n, d = 0) => Number(n).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const fmtBytes = (b) => (b >= 1048576 ? fmt(b / 1048576, 1) + ' MB' : b >= 1024 ? fmt(b / 1024, 1) + ' KB' : b + ' B');
+  const el = (id) => document.getElementById(id);
+  const TIPOS = ['protetiva', 'faccao', 'generico'];
+  const VAR_TIPO = { generico: '--gen', faccao: '--fac', protetiva: '--pro' };
+  const reduzir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const RE_TS = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01]) ([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/;
+
+  /** Cria elemento HTML. Texto sempre entra como nó de texto (nunca innerHTML). */
+  function h(tag, attrs, ...filhos) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k === 'style') Object.assign(e.style, v);
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? '' : v);
+    }
+    for (const f of filhos.flat()) if (f !== null && f !== undefined && f !== false) e.append(f instanceof Node ? f : String(f));
+    return e;
+  }
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  function s(tag, attrs, ...filhos) {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) if (v !== null && v !== undefined) e.setAttribute(k, v);
+    for (const f of filhos.flat()) if (f !== null && f !== undefined) e.append(f instanceof Node ? f : String(f));
+    return e;
+  }
+  const chip = (tipo) => h('span', { class: `chip ${TIPOS.includes(tipo) ? tipo : ''}` }, tipo);
+  const trocar = (alvo, ...filhos) => alvo.replaceChildren(...filhos.flat().filter(Boolean));
+
+  /** Estilo de traço por tipo (não depender só da cor). */
+  function tracoTipo(ctx, tipo, base) {
+    ctx.strokeStyle = css(VAR_TIPO[tipo]);
+    ctx.setLineDash(tipo === 'faccao' ? [7, 4] : []);
+    ctx.lineWidth = tipo === 'protetiva' ? base + 2 : base;
+  }
+
+  /* ================= simulação (dados fictícios) ================= */
+  const W = 300;
+  const H = 180;
+  const CEL = 25;
+  const LAT0 = -3.1;
+  const LON0 = -60.02;
+  const M_LON0 = M_LAT * Math.cos(LAT0 * RAD);
+  let semente = 20271103;
+  const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const simPessoas = [];
+  for (let i = 1; i <= 24; i++) simPessoas.push({ id: i, faccao: i % 4 === 0 ? '' : String(1 + (i % 3)), vitima: false, restr: new Set() });
+  for (let v = 0; v < 6; v++) simPessoas.push({ id: 25 + v, faccao: '', vitima: true, restr: new Set([1 + v * 4]) });
+  for (const p of simPessoas) Object.assign(p, { x: rnd() * W, y: rnd() * H, vx: (rnd() - 0.5) * 3, vy: (rnd() - 0.5) * 3 });
+  const simPorId = new Map(simPessoas.map((p) => [p.id, p]));
+  const classificarSim = (a, b) => {
+    if ((a.vitima && a.restr.has(b.id)) || (b.vitima && b.restr.has(a.id))) return 'protetiva';
+    if (a.vitima || b.vitima) return null;
+    if (a.faccao && a.faccao === b.faccao) return 'faccao';
+    return 'generico';
+  };
+  let simT = 0;
+  let simEnc = [];
+  let simChecados = 0;
+  const tsTexto = (k) => new Date(Date.UTC(2024, 0, 1) + k * 5000).toISOString().replace('T', ' ').slice(0, 19);
+
+  function simMover() {
+    for (const p of simPessoas) {
+      if (!p.vitima) continue;
+      const ag = simPorId.get([...p.restr][0]); // o agressor tende a se aproximar, para a simulação mostrar protetiva
+      ag.vx += (p.x - ag.x) * 0.004;
+      ag.vy += (p.y - ag.y) * 0.004;
+    }
+    for (const p of simPessoas) {
+      p.vx += (rnd() - 0.5) * 1.4;
+      p.vy += (rnd() - 0.5) * 1.4;
+      const v = Math.hypot(p.vx, p.vy);
+      if (v > 4.5) { p.vx *= 4.5 / v; p.vy *= 4.5 / v; }
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 2 || p.x > W - 2) { p.vx *= -1; p.x = Math.min(W - 2, Math.max(2, p.x)); }
+      if (p.y < 2 || p.y > H - 2) { p.vy *= -1; p.y = Math.min(H - 2, Math.max(2, p.y)); }
+      p.lat = LAT0 + p.y / M_LAT;
+      p.lon = LON0 + p.x / M_LON0;
+    }
+  }
+  function simDetectar() {
+    const cel = new Map();
+    for (const p of simPessoas) {
+      p.cx = Math.floor(p.x / CEL);
+      p.cy = Math.floor(p.y / CEL);
+      const k = p.cx * 1000 + p.cy;
+      if (!cel.has(k)) cel.set(k, []);
+      cel.get(k).push(p);
+    }
+    simEnc = [];
+    simChecados = 0;
+    const testar = (a, b) => {
+      simChecados++;
+      const d = haversine(a.lat, a.lon, b.lat, b.lon);
+      if (d >= LIMITE) return;
+      const tipo = classificarSim(a, b);
+      if (tipo) simEnc.push({ a: a.id < b.id ? a : b, b: a.id < b.id ? b : a, d, tipo });
+    };
+    for (const lista of cel.values()) {
+      for (let i = 0; i < lista.length; i++) for (let j = i + 1; j < lista.length; j++) testar(lista[i], lista[j]);
+      for (const [dx, dy] of [[0, 1], [1, -1], [1, 0], [1, 1]]) {
+        const outra = cel.get((lista[0].cx + dx) * 1000 + (lista[0].cy + dy));
+        if (outra) for (const a of lista) for (const b of outra) testar(a, b);
+      }
+    }
+    simEnc.sort((x, y) => TIPOS.indexOf(x.tipo) - TIPOS.indexOf(y.tipo) || x.d - y.d);
+  }
+
+  const cvSim = el('mapa');
+  const ctxSim = cvSim.getContext('2d');
+  const cGrade = el('c-grade');
+  function larguraCanvas(canvas) {
+    const pai = canvas.parentElement.parentElement;
+    return Math.max(280, pai.clientWidth - (window.innerWidth > 900 ? 320 : 0));
+  }
+  function dimSim() {
+    const w = larguraCanvas(cvSim);
+    const hgt = Math.round(w * (H / W));
+    const dpr = window.devicePixelRatio || 1;
+    cvSim.width = Math.round(w * dpr);
+    cvSim.height = Math.round(hgt * dpr);
+    cvSim.style.height = hgt + 'px';
+    ctxSim.setTransform(dpr, 0, 0, dpr, 0, 0);
+    desenharSim();
+  }
+  function desenharSim() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cvSim.width / dpr;
+    const hgt = cvSim.height / dpr;
+    const sc = w / W;
+    const c = { ink: css('--ink'), muted: css('--muted'), line: css('--line'), surface: css('--surface'), pro: css('--pro') };
+    ctxSim.fillStyle = c.surface;
+    ctxSim.fillRect(0, 0, w, hgt);
+    if (cGrade.checked) {
+      ctxSim.strokeStyle = c.line;
+      ctxSim.lineWidth = 1;
+      ctxSim.setLineDash([]);
+      ctxSim.beginPath();
+      for (let x = 0; x <= W; x += CEL) { ctxSim.moveTo(x * sc + 0.5, 0); ctxSim.lineTo(x * sc + 0.5, hgt); }
+      for (let y = 0; y <= H; y += CEL) { ctxSim.moveTo(0, y * sc + 0.5); ctxSim.lineTo(w, y * sc + 0.5); }
+      ctxSim.stroke();
+    }
+    ctxSim.fillStyle = c.muted;
+    ctxSim.font = '11px ' + css('--f-mono');
+    ctxSim.fillRect(12, hgt - 14, 20 * sc, 2);
+    ctxSim.fillText('20 m', 18 + 20 * sc, hgt - 10);
+    for (const e of simEnc) {
+      ctxSim.fillStyle = css(VAR_TIPO[e.tipo]) + '22';
+      ctxSim.beginPath();
+      ctxSim.arc(e.a.x * sc, e.a.y * sc, LIMITE * sc, 0, Math.PI * 2);
+      ctxSim.fill();
+    }
+    for (const e of simEnc) {
+      tracoTipo(ctxSim, e.tipo, 2);
+      ctxSim.beginPath();
+      ctxSim.moveTo(e.a.x * sc, e.a.y * sc);
+      ctxSim.lineTo(e.b.x * sc, e.b.y * sc);
+      ctxSim.stroke();
+    }
+    ctxSim.setLineDash([]);
+    for (const p of simPessoas) {
+      const x = p.x * sc;
+      const y = p.y * sc;
+      if (p.vitima) {
+        ctxSim.strokeStyle = c.pro; ctxSim.lineWidth = 2; ctxSim.fillStyle = c.surface;
+        ctxSim.beginPath(); ctxSim.arc(x, y, 5, 0, Math.PI * 2); ctxSim.fill(); ctxSim.stroke();
+      } else {
+        ctxSim.fillStyle = c.ink; ctxSim.beginPath(); ctxSim.arc(x, y, 4, 0, Math.PI * 2); ctxSim.fill();
+      }
+      ctxSim.fillStyle = c.muted;
+      ctxSim.font = '10px ' + css('--f-mono');
+      ctxSim.fillText(String(p.id), x + 6, y - 5);
+    }
+  }
+  function painelSim() {
+    el('relogio').textContent = tsTexto(simT);
+    el('s-n').textContent = simPessoas.length;
+    el('s-bruta').textContent = (simPessoas.length * (simPessoas.length - 1)) / 2;
+    el('s-grade').textContent = simChecados;
+    el('s-enc').textContent = simEnc.length;
+    const desc = (p) => (p.vitima ? `vítima ${p.id}` : `${p.id}${p.faccao ? ` (fac. ${p.faccao})` : ''}`);
+    trocar(
+      el('lista-enc'),
+      simEnc.length
+        ? simEnc.map((e) => h('div', null, chip(e.tipo), ` ${desc(e.a)} × ${desc(e.b)} · `, h('span', { class: 'mono' }, `${fmt(e.d, 1)} m`)))
+        : [h('span', { class: 'vazio' }, 'Nenhum par a menos de 20 m.')]
+    );
+  }
+  function simPasso() { simT++; simMover(); simDetectar(); desenharSim(); painelSim(); }
+  let rodando = !reduzir;
+  let timer = null;
+  const bPlay = el('b-play');
+  function atualizarPlay() {
+    bPlay.textContent = rodando ? 'Pausar' : 'Continuar';
+    clearInterval(timer);
+    if (rodando) timer = setInterval(simPasso, 900);
+  }
+  bPlay.addEventListener('click', () => { rodando = !rodando; atualizarPlay(); });
+  el('b-passo').addEventListener('click', () => { rodando = false; atualizarPlay(); simPasso(); });
+  cGrade.addEventListener('change', desenharSim);
+  simMover();
+  simDetectar();
+  for (let i = 0; i < 400 && !(simEnc.length >= 2 && simEnc.some((e) => e.tipo !== 'generico')); i++) { simT++; simMover(); simDetectar(); }
+  simT = 0;
+
+  /* ================= calculadora ================= */
+  const idsCalc = ['lat1', 'lon1', 'lat2', 'lon2'];
+  function calcular() {
+    const [lat1, lon1, lat2, lon2] = idsCalc.map((i) => parseFloat(el(i).value));
+    if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) { trocar(el('conta'), h('span', null, 'Preencha as quatro coordenadas.')); return; }
+    const dLat = paraRad(lat2 - lat1);
+    const dLon = paraRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(paraRad(lat1)) * Math.cos(paraRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const d = haversine(lat1, lon1, lat2, lon2);
+    const enc = d < LIMITE;
+    trocar(
+      el('conta'),
+      h('span', null, `Δφ = ${dLat.toExponential(6)} rad`),
+      h('span', null, `Δλ = ${dLon.toExponential(6)} rad`),
+      h('span', null, `a = sin²(Δφ/2) + cos φ₁·cos φ₂·sin²(Δλ/2) = ${a.toExponential(6)}`),
+      h('span', null, 'd = 2R·asin(√a), com R = 6.371.000 m'),
+      h('span', { class: 'res' }, `${String(d)} m`),
+      h('span', { class: `veredito ${enc ? 'sim' : 'nao'}` }, enc ? 'Menor que 20 m: é encontro.' : 'Não é encontro: 20 m ou mais.')
+    );
+  }
+  idsCalc.forEach((i) => el(i).addEventListener('input', calcular));
+
+  /* ================= resultados dos 7 datasets ================= */
+  const RELATORIO_PADRAO = {"geradoEm":"2026-11-03T23:15:46.141Z","ambiente":{"node":"v22.23.4","plataforma":"linux x64"},"repeticoes":3,"datasets":[{"dataset":1,"arquivo":"dataset1.txt","linhas":{"validas":5000,"invalidas":0},"pessoas":10,"timestamps":500,"encontros":4,"porTipo":{"protetiva":1,"faccao":1,"generico":2},"tempos":{"mediaMs":15.8},"pares":{"forcaBruta":22500,"candidatos":22500,"haversine":6},"validacao":{"perfeito":true}},{"dataset":2,"arquivo":"dataset2.txt","linhas":{"validas":25000,"invalidas":0},"pessoas":20,"timestamps":1250,"encontros":6,"porTipo":{"protetiva":1,"faccao":2,"generico":3},"tempos":{"mediaMs":14.5},"pares":{"forcaBruta":237500,"candidatos":237500,"haversine":13},"validacao":{"perfeito":true}},{"dataset":3,"arquivo":"dataset3.txt","linhas":{"validas":100000,"invalidas":0},"pessoas":40,"timestamps":2500,"encontros":10,"porTipo":{"protetiva":2,"faccao":3,"generico":5},"tempos":{"mediaMs":51.1},"pares":{"forcaBruta":1950000,"candidatos":18,"haversine":12},"validacao":null},{"dataset":4,"arquivo":"dataset4.txt","linhas":{"validas":400020,"invalidas":0},"pessoas":60,"timestamps":6667,"encontros":15,"porTipo":{"protetiva":3,"faccao":5,"generico":7},"tempos":{"mediaMs":119.6},"pares":{"forcaBruta":11800590,"candidatos":17,"haversine":16},"validacao":null},{"dataset":5,"arquivo":"dataset5.txt","linhas":{"validas":1000000,"invalidas":0},"pessoas":80,"timestamps":12500,"encontros":21,"porTipo":{"protetiva":4,"faccao":7,"generico":10},"tempos":{"mediaMs":270.4},"pares":{"forcaBruta":39500000,"candidatos":23,"haversine":22},"validacao":null},{"dataset":6,"arquivo":"dataset6.txt","linhas":{"validas":8000000,"invalidas":0},"pessoas":100,"timestamps":80000,"encontros":27,"porTipo":{"protetiva":6,"faccao":9,"generico":12},"tempos":{"mediaMs":2240},"pares":{"forcaBruta":396000000,"candidatos":33,"haversine":28},"validacao":null},{"dataset":7,"arquivo":"dataset7.txt","linhas":{"validas":12000000,"invalidas":0},"pessoas":120,"timestamps":100000,"encontros":35,"porTipo":{"protetiva":8,"faccao":12,"generico":15},"tempos":{"mediaMs":3417},"pares":{"forcaBruta":714000000,"candidatos":47,"haversine":38},"validacao":null}]};
+  let relatorio = RELATORIO_PADRAO;
+  let relatorioOrigem = 'padrao';
+
+  function graficoBarras({ titulo, nota, itens, escalaLog = false, formatar = (v) => fmt(v), series }) {
+    // itens: [{rotulo, valores: {serie: valor}}]; series: [{chave, rotulo, cor, estilo}]
+    const alturaLinha = series.length > 1 ? 12 : 16;
+    const gap = 10;
+    const larg = 360;
+    const esq = 74;
+    const dir = 64;
+    const util = larg - esq - dir;
+    const todos = itens.flatMap((it) => series.map((sr) => it.valores[sr.chave] || 0));
+    const max = Math.max(1, ...todos);
+    const escala = (v) => (escalaLog ? (v <= 0 ? 0 : (Math.log10(v + 1) / Math.log10(max + 1)) * util) : (v / max) * util);
+    const blocoAltura = alturaLinha * series.length + 4;
+    const altura = itens.length * (blocoAltura + gap) + 6;
+    const svgEl = s('svg', { viewBox: `0 0 ${larg} ${altura}`, role: 'img', 'aria-label': titulo });
+    itens.forEach((it, i) => {
+      const y0 = i * (blocoAltura + gap);
+      svgEl.append(s('text', { x: esq - 8, y: y0 + blocoAltura / 2 + 4, 'text-anchor': 'end', 'font-size': 11, fill: css('--muted') }, it.rotulo));
+      series.forEach((sr, k) => {
+        const v = it.valores[sr.chave] || 0;
+        const y = y0 + k * alturaLinha;
+        const w = Math.max(v > 0 ? 2 : 0, escala(v));
+        const ret = s('rect', { x: esq, y, width: w, height: alturaLinha - 3, rx: 2, fill: sr.cor });
+        if (sr.estilo === 'contorno') { ret.setAttribute('fill', 'none'); ret.setAttribute('stroke', sr.cor); ret.setAttribute('stroke-width', 1.5); }
+        ret.append(s('title', null, `${it.rotulo} · ${sr.rotulo}: ${formatar(v)}`));
+        svgEl.append(ret);
+        svgEl.append(s('text', { x: esq + w + 5, y: y + alturaLinha - 4, 'font-size': 10, fill: css('--ink') }, formatar(v)));
+      });
+    });
+    const legenda = series.length > 1 ? h('div', { class: 'legenda', style: { border: 0, padding: 0 } }, series.map((sr) => h('span', null, h('i', { class: 'traco', style: { color: sr.cor, borderTopWidth: '6px' } }), sr.rotulo))) : null;
+    return h('div', { class: 'grafico' }, h('h3', null, titulo), svgEl, legenda, nota ? h('p', { class: 'nota' }, nota) : null);
+  }
+
+  function renderResultados() {
+    const fonte = el('res-fonte');
+    const tbody = el('tab-res').tBodies[0];
+    const tfoot = el('tab-res').tFoot;
+    if (!relatorio || !Array.isArray(relatorio.datasets)) {
+      fonte.textContent = 'Nenhum relatório carregado. Rode "npm start" e abra relatorios/relatorio-execucao.json na seção "Analisar um dataset".';
+      trocar(el('res-graficos'));
+      trocar(tbody);
+      trocar(tfoot);
+      return;
+    }
+    const ok = relatorio.datasets.filter((d) => !d.erro);
+    const quando = relatorio.geradoEm ? new Date(relatorio.geradoEm).toLocaleString('pt-BR') : 'data desconhecida';
+    const amb = relatorio.ambiente ? `${relatorio.ambiente.plataforma || ''}, Node ${relatorio.ambiente.node || '?'}` : 'ambiente não informado';
+    fonte.textContent =
+      relatorioOrigem === 'padrao'
+        ? `Números medidos no ambiente de desenvolvimento (${amb}) em ${quando}, média de ${relatorio.repeticoes} execuções. Abra o seu relatorios/relatorio-execucao.json para ver os números da sua máquina.`
+        : `Fonte: ${relatorioOrigem}, gerado em ${quando} (${amb}), média de ${relatorio.repeticoes} execuções.`;
+
+    const cor = { protetiva: css('--pro'), faccao: css('--fac'), generico: css('--gen') };
+    trocar(
+      el('res-graficos'),
+      graficoBarras({
+        titulo: 'Encontros por dataset e tipo',
+        itens: ok.map((d) => ({ rotulo: `dataset${d.dataset}`, valores: d.porTipo || {} })),
+        series: TIPOS.map((t) => ({ chave: t, rotulo: t, cor: cor[t] })),
+      }),
+      graficoBarras({
+        titulo: 'Tempo médio de processamento',
+        nota: 'Inclui ler, validar, agrupar, buscar pares e classificar.',
+        itens: ok.map((d) => ({ rotulo: `dataset${d.dataset}`, valores: { t: d.tempos ? d.tempos.mediaMs : 0 } })),
+        series: [{ chave: 't', rotulo: 'ms', cor: css('--accent') }],
+        formatar: (v) => `${fmt(v, v < 100 ? 1 : 0)} ms`,
+      }),
+      graficoBarras({
+        titulo: 'Pares: força bruta × grade espacial',
+        nota: 'Escala logarítmica. A força bruta compararia todos os pares de cada timestamp; a grade avalia só vizinhos, e o Haversine só roda em quem passa do filtro de latitude.',
+        escalaLog: true,
+        itens: ok.map((d) => ({ rotulo: `dataset${d.dataset}`, valores: { fb: d.pares ? d.pares.forcaBruta : 0, cand: d.pares ? d.pares.candidatos : 0, hav: d.pares ? d.pares.haversine : 0 } })),
+        series: [
+          { chave: 'fb', rotulo: 'pares possíveis', cor: css('--muted'), estilo: 'contorno' },
+          { chave: 'cand', rotulo: 'pares avaliados', cor: css('--accent') },
+          { chave: 'hav', rotulo: 'cálculos de Haversine', cor: css('--ink') },
+        ],
+      })
+    );
+
+    trocar(
+      tbody,
+      relatorio.datasets.map((d) =>
+        d.erro
+          ? h('tr', null, h('td', null, d.arquivo || `dataset${d.dataset}`), h('td', { colspan: 8 }, `Erro: ${d.erro}`))
+          : h(
+              'tr',
+              null,
+              h('td', null, `dataset${d.dataset}`),
+              h('td', { class: 'num' }, fmt(d.linhas ? d.linhas.validas : 0)),
+              h('td', { class: 'num' }, fmt(d.pessoas || 0)),
+              h('td', { class: 'num' }, fmt(d.timestamps || 0)),
+              h('td', { class: 'num' }, fmt(d.encontros || 0)),
+              h('td', { class: 'num' }, fmt(d.pares ? d.pares.forcaBruta : 0)),
+              h('td', { class: 'num' }, fmt(d.pares ? d.pares.candidatos : 0)),
+              h('td', { class: 'num' }, `${fmt(d.tempos ? d.tempos.mediaMs : 0, 1)} ms`),
+              h('td', null, d.validacao ? (d.validacao.perfeito ? h('span', { class: 'ok' }, '✓ idêntico') : h('span', { style: { color: 'var(--pro)' } }, '✗ divergências')) : h('span', { class: 'fonte' }, 'sem gabarito público'))
+            )
+      )
+    );
+    const soma = (f) => ok.reduce((a, d) => a + (f(d) || 0), 0);
+    trocar(
+      tfoot,
+      h(
+        'tr',
+        null,
+        h('td', null, 'Total'),
+        h('td', { class: 'num' }, fmt(soma((d) => d.linhas && d.linhas.validas))),
+        h('td'),
+        h('td', { class: 'num' }, fmt(soma((d) => d.timestamps))),
+        h('td', { class: 'num' }, fmt(soma((d) => d.encontros))),
+        h('td', { class: 'num' }, fmt(soma((d) => d.pares && d.pares.forcaBruta))),
+        h('td', { class: 'num' }, fmt(soma((d) => d.pares && d.pares.candidatos))),
+        h('td', { class: 'num' }, `${fmt(soma((d) => d.tempos && d.tempos.mediaMs), 0)} ms`),
+        h('td')
+      )
+    );
+  }
+
+  /* ================= análise de dados reais ================= */
+  const EXEMPLO = {
+    nome: 'exemplo do enunciado',
+    encontros: [
+      { tipo: 'faccao', monitoradosEncontro: [40, 44], timestamp: '2024-01-01 00:01:50', posicoes: { 40: { lat: -10.07996, lon: -37.08384 }, 44: { lat: -10.07987, lon: -37.08389 } }, distanciaMetros: 11.406788673336607 },
+    ],
+  };
+  const GRANDE = 60 * 1024 * 1024;
+  const POR_PAGINA = 25;
+
+  /** Estado único da análise. Cada carregamento cria um estado novo do zero. */
+  let est = novoEstado('vazio');
+  function novoEstado(fonte) {
+    return { fonte, json: null, txt: null, consistencia: null, filtrada: [], pagina: 0, sel: -1, zoomM: null, panX: 0, panY: 0 };
+  }
+
+  /* ---------- mensagens e progresso ---------- */
+  function mensagens(lista) {
+    trocar(
+      el('mensagens'),
+      lista.map((m) => h('div', { class: `msg ${m.tipo}`, role: m.tipo === 'erro' ? 'alert' : null }, h('strong', null, m.titulo), m.texto ? ` ${m.texto}` : null, m.itens && m.itens.length ? h('ul', null, m.itens.map((i) => h('li', null, i))) : null))
+    );
+  }
+  function progresso(fracao) {
+    const p = el('progresso');
+    if (fracao === null) { p.hidden = true; return; }
+    p.hidden = false;
+    p.firstElementChild.style.width = `${Math.round(fracao * 100)}%`;
+  }
+  const pausa = () => new Promise((r) => setTimeout(r, 0));
+
+  /* ---------- validação do JSON de encontros ---------- */
+  function problemasDoEncontro(e) {
+    if (!e || typeof e !== 'object' || Array.isArray(e)) return ['não é um objeto'];
+    const p = [];
+    for (const c of ['tipo', 'monitoradosEncontro', 'timestamp', 'posicoes', 'distanciaMetros']) if (!(c in e)) p.push(`campo ausente: ${c}`);
+    if (p.length) return p;
+    if (!TIPOS.includes(e.tipo)) p.push('tipo inválido');
+    const ids = e.monitoradosEncontro;
+    if (!Array.isArray(ids) || ids.length !== 2 || String(ids[0]) === String(ids[1])) p.push('monitoradosEncontro precisa ter 2 ids diferentes');
+    if (typeof e.timestamp !== 'string' || !RE_TS.test(e.timestamp)) p.push('timestamp fora do formato YYYY-MM-DD HH:MM:SS');
+    const d = e.distanciaMetros;
+    if (typeof d !== 'number' || !Number.isFinite(d) || d < 0 || !(d < LIMITE)) p.push('distanciaMetros inválida ou ≥ 20');
+    if (!p.length) {
+      const A = e.posicoes && e.posicoes[ids[0]];
+      const B = e.posicoes && e.posicoes[ids[1]];
+      const valida = (q) => q && Number.isFinite(q.lat) && Number.isFinite(q.lon) && Math.abs(q.lat) <= 90 && Math.abs(q.lon) <= 180;
+      if (!valida(A) || !valida(B)) p.push('posição ausente ou inválida');
+      else if (Math.abs(haversine(A.lat, A.lon, B.lat, B.lon) - d) > 1e-6) p.push('distanciaMetros não confere com as posições');
+    }
+    return p;
+  }
+  const chaveEnc = (e) => `${e.timestamp}|${e.monitoradosEncontro.map(String).sort().join('|')}`;
+
+  function validarJsonEncontros(dados, nome) {
+    if (!Array.isArray(dados)) return { erro: `${nome} não é uma lista de encontros (o JSON precisa começar com "[").` };
+    const validos = [];
+    const invalidos = [];
+    const vistos = new Set();
+    let duplicados = 0;
+    dados.forEach((e, i) => {
+      const p = problemasDoEncontro(e);
+      if (p.length) { invalidos.push(`posição ${i}: ${p.join('; ')}`); return; }
+      const k = chaveEnc(e);
+      if (vistos.has(k)) { duplicados++; return; }
+      vistos.add(k);
+      validos.push(e);
+    });
+    return { validos, invalidos, duplicados };
+  }
+
+  /* ---------- leitura do TXT em blocos ---------- */
+  const limpar = (v) => (v || '').replace(/^[\s"'﻿]+|[\s"'\r]+$/g, '');
+  async function lerTxt(arquivo, filtroTs) {
+    const BLOCO = 8 << 20;
+    const dec = new TextDecoder('utf-8');
+    const porTs = new Map(); // ts -> [{id, lat, lon}] (só os timestamps do filtro, se houver)
+    const contagemTs = new Map(); // ts -> quantidade (todos)
+    const pessoas = new Map(); // id(texto) -> {faccao, vitima, restr[]}
+    const stats = { linhas: 0, validas: 0, invalidas: 0, motivos: {} };
+    let resto = '';
+    let cabecalhoVisto = false;
+    const rejeitar = (m) => { stats.invalidas++; stats.motivos[m] = (stats.motivos[m] || 0) + 1; };
+    const processar = (l) => {
+      if (!l || !l.trim()) return;
+      stats.linhas++;
+      const c = l.split(';');
+      const id = limpar(c[0]);
+      if (!cabecalhoVisto) {
+        cabecalhoVisto = true;
+        if (id.toLowerCase() === 'idmonitorado') { stats.linhas--; return; }
+      }
+      if (c.length < 5) return rejeitar('campos insuficientes');
+      if (!id) return rejeitar('id vazio');
+      const ts = limpar(c[2]);
+      if (!RE_TS.test(ts)) return rejeitar('timestamp inválido');
+      const lat = Number(limpar(c[3]).replace(',', '.'));
+      const lon = Number(limpar(c[4]).replace(',', '.'));
+      if (!Number.isFinite(lat) || Math.abs(lat) > 90) return rejeitar('latitude inválida');
+      if (!Number.isFinite(lon) || Math.abs(lon) > 180) return rejeitar('longitude inválida');
+      stats.validas++;
+      let pe = pessoas.get(id);
+      if (!pe) pessoas.set(id, (pe = { faccao: '', vitima: false, restr: [] }));
+      if (!pe.faccao) pe.faccao = limpar(c[1]);
+      if (!pe.vitima && /^(true|1|sim|s|t|yes|y)$/i.test(limpar(c[5]))) pe.vitima = true;
+      if (!pe.restr.length && c.length > 6) pe.restr = c.slice(6).join(',').replace(/["'\[\]\s]/g, '').split(',').filter(Boolean);
+      contagemTs.set(ts, (contagemTs.get(ts) || 0) + 1);
+      if (filtroTs && !filtroTs.has(ts)) return;
+      let g = porTs.get(ts);
+      if (!g) porTs.set(ts, (g = []));
+      g.push({ id, lat, lon });
+    };
+    for (let off = 0; off < arquivo.size; off += BLOCO) {
+      const fim = off + BLOCO >= arquivo.size;
+      const texto = resto + dec.decode(await arquivo.slice(off, off + BLOCO).arrayBuffer(), { stream: !fim });
+      const linhas = texto.split('\n');
+      resto = linhas.pop();
+      for (const l of linhas) processar(l);
+      progresso(Math.min(1, (off + BLOCO) / arquivo.size));
+      await pausa(); // devolve o controle à interface entre blocos
+    }
+    processar(resto);
+    let paresForcaBruta = 0;
+    for (const n of contagemTs.values()) paresForcaBruta += (n * (n - 1)) / 2;
+    return { porTs, pessoas, stats, timestamps: contagemTs.size, paresForcaBruta, filtrado: !!filtroTs };
+  }
+
+  /* ---------- consistência TXT × JSON ---------- */
+  function conferir(encontros, txt) {
+    const divergencias = [];
+    let conferidos = 0;
+    for (const e of encontros) {
+      const grupo = txt.porTs.get(e.timestamp);
+      const [a, b] = e.monitoradosEncontro.map(String);
+      if (!grupo) { divergencias.push(`${e.timestamp} ${a}×${b}: timestamp não existe no TXT`); continue; }
+      const pa = grupo.find((p) => p.id === a);
+      const pb = grupo.find((p) => p.id === b);
+      if (!pa || !pb) { divergencias.push(`${e.timestamp} ${a}×${b}: pessoa ausente no TXT nesse timestamp`); continue; }
+      const A = e.posicoes[e.monitoradosEncontro[0]];
+      const B = e.posicoes[e.monitoradosEncontro[1]];
+      if (pa.lat !== A.lat || pa.lon !== A.lon || pb.lat !== B.lat || pb.lon !== B.lon) { divergencias.push(`${e.timestamp} ${a}×${b}: posição diferente da do TXT`); continue; }
+      conferidos++;
+    }
+    return { conferidos, divergencias };
+  }
+
+  /* ---------- carregamento ---------- */
+  const numeroDoNome = (n) => { const m = /(\d+)/.exec(n); return m ? Number(m[1]) : null; };
+
+  async function abrir(listaArquivos) {
+    const arquivos = [...listaArquivos];
+    const txts = arquivos.filter((f) => /\.txt$/i.test(f.name));
+    const jsons = arquivos.filter((f) => /\.json$/i.test(f.name));
+    const outros = arquivos.filter((f) => !txts.includes(f) && !jsons.includes(f));
+    const msgs = [];
+    if (outros.length) msgs.push({ tipo: 'aviso', titulo: 'Ignorado:', texto: `${outros.map((f) => f.name).join(', ')} (só .txt e .json são aceitos).` });
+
+    // relatório de execução? (JSON com "datasets")
+    const jsonsEncontros = [];
+    for (const f of jsons) {
+      let dados;
+      try { dados = JSON.parse(await f.text()); } catch (err) { msgs.push({ tipo: 'erro', titulo: `${f.name}:`, texto: `não é um JSON válido (${err.message}).` }); continue; }
+      if (dados && !Array.isArray(dados) && Array.isArray(dados.datasets)) {
+        relatorio = dados;
+        relatorioOrigem = f.name;
+        renderResultados();
+        msgs.push({ tipo: 'ok', titulo: 'Relatório carregado:', texto: `${f.name} atualizou a seção "Os 7 datasets".` });
+      } else jsonsEncontros.push({ f, dados });
+    }
+    if (!txts.length && !jsonsEncontros.length) { mensagens(msgs.length ? msgs : [{ tipo: 'aviso', titulo: 'Nenhum arquivo de dataset.', texto: 'Abra um datasetN.txt e/ou o datasetN.json correspondente.' }]); return; }
+    if (txts.length > 1 || jsonsEncontros.length > 1) {
+      mensagens([...msgs, { tipo: 'erro', titulo: 'Um dataset por vez.', texto: 'Abra no máximo um .txt e um .json de encontros juntos, para não misturar datasets.' }]);
+      return;
+    }
+    const txtF = txts[0] || null;
+    const jsonE = jsonsEncontros[0] || null;
+    if (txtF && jsonE) {
+      const a = numeroDoNome(txtF.name);
+      const b = numeroDoNome(jsonE.f.name);
+      if (a !== null && b !== null && a !== b) {
+        mensagens([...msgs, { tipo: 'erro', titulo: 'Arquivos de datasets diferentes:', texto: `${txtF.name} e ${jsonE.f.name}. Abra o .txt e o .json do mesmo dataset.` }]);
+        return;
+      }
+    }
+
+    // arquivo já aberto antes, do mesmo dataset, pode ser combinado com o novo
+    // (permite abrir o .txt e o .json em momentos diferentes, de pastas diferentes)
+    const anterior = est.fonte === 'arquivos' ? est : null;
+    let reaproveitarJson = null;
+    let reaproveitarTxt = null;
+    if (anterior) {
+      const nNovo = numeroDoNome((txtF && txtF.name) || (jsonE && jsonE.f.name) || '');
+      const mesmoDataset = (nome) => {
+        const n = numeroDoNome(nome);
+        return n === null || nNovo === null || n === nNovo;
+      };
+      if (txtF && !jsonE && anterior.json) {
+        if (mesmoDataset(anterior.json.nome)) reaproveitarJson = anterior.json;
+        else msgs.push({ tipo: 'aviso', titulo: `${anterior.json.nome} era de outro dataset`, texto: `e foi descartado. Abra agora o JSON correspondente a ${txtF.name}.` });
+      }
+      if (jsonE && !txtF && anterior.txt) {
+        if (!mesmoDataset(anterior.txt.nome)) msgs.push({ tipo: 'aviso', titulo: `${anterior.txt.nome} era de outro dataset`, texto: `e foi descartado. Abra agora o TXT correspondente a ${jsonE.f.name}.` });
+        else if (anterior.txt.filtrado) msgs.push({ tipo: 'aviso', titulo: `${anterior.txt.nome} precisa ser aberto de novo:`, texto: 'por ser grande, só os timestamps do JSON anterior tinham ficado na memória.' });
+        else reaproveitarTxt = anterior.txt;
+      }
+    }
+
+    // novo carregamento: começa do zero (só reaproveita o que foi conferido acima)
+    est = novoEstado('carregando');
+    renderAnalise();
+    const novo = novoEstado('arquivos');
+    try {
+      if (reaproveitarJson) novo.json = reaproveitarJson;
+      if (reaproveitarTxt) novo.txt = reaproveitarTxt;
+      if (jsonE) {
+        const v = validarJsonEncontros(jsonE.dados, jsonE.f.name);
+        if (v.erro) throw new Error(v.erro);
+        novo.json = { nome: jsonE.f.name, tamanho: jsonE.f.size, encontros: v.validos, invalidos: v.invalidos, duplicados: v.duplicados, total: jsonE.dados.length };
+        if (v.invalidos.length) msgs.push({ tipo: 'aviso', titulo: `${v.invalidos.length} encontro(s) inválido(s) em ${jsonE.f.name} foram deixados de fora:`, itens: v.invalidos.slice(0, 8).concat(v.invalidos.length > 8 ? [`… e mais ${v.invalidos.length - 8}`] : []) });
+        if (v.duplicados) msgs.push({ tipo: 'aviso', titulo: `${v.duplicados} encontro(s) duplicado(s)`, texto: 'no JSON (mesmo timestamp e par); só o primeiro foi mantido.' });
+      }
+      if (txtF) {
+        const grande = txtF.size > GRANDE;
+        if (grande && !novo.json) throw new Error(`${txtF.name} tem ${fmtBytes(txtF.size)}. Para arquivos grandes, abra primeiro o JSON de encontros (botão 2) e depois este TXT: assim só os timestamps dos encontros ficam na memória.`);
+        const filtro = grande ? new Set(novo.json.encontros.map((e) => e.timestamp)) : null;
+        mensagens([...msgs, { tipo: 'aviso', titulo: `Lendo ${txtF.name}…`, texto: grande ? 'arquivo grande: só os timestamps com encontro serão guardados.' : '' }]);
+        novo.txt = { nome: txtF.name, tamanho: txtF.size, ...(await lerTxt(txtF, filtro)) };
+        if (novo.txt.stats.invalidas) msgs.push({ tipo: 'aviso', titulo: `${fmt(novo.txt.stats.invalidas)} linha(s) inválida(s) em ${txtF.name}:`, itens: Object.entries(novo.txt.stats.motivos).map(([m, q]) => `${m}: ${fmt(q)}`) });
+        if (!novo.txt.stats.validas) throw new Error(`${txtF.name} não tem nenhuma linha válida.`);
+      }
+      if (novo.json && novo.txt) {
+        novo.consistencia = conferir(novo.json.encontros, novo.txt);
+        const c = novo.consistencia;
+        if (c.divergencias.length) {
+          msgs.push({ tipo: 'erro', titulo: `${c.divergencias.length} de ${novo.json.encontros.length} encontro(s) não batem com ${novo.txt.nome}.`, texto: 'Confira se os arquivos são do mesmo dataset.', itens: c.divergencias.slice(0, 8) });
+        } else {
+          msgs.push({ tipo: 'ok', titulo: 'TXT e JSON conferidos:', texto: `os ${fmt(c.conferidos)} encontros existem no arquivo de posições, com as mesmas coordenadas.` });
+        }
+      } else if (novo.json) msgs.push({ tipo: 'aviso', titulo: 'Encontros carregados.', texto: `Agora clique em "1. Abrir posições (.txt)" e escolha dados/dataset${numeroDoNome(novo.json.nome) ?? 'N'}.txt para conferir as posições e ver quem mais estava por perto.` });
+      else msgs.push({ tipo: 'aviso', titulo: 'Posições carregadas.', texto: `Agora clique em "2. Abrir encontros (.json)" e escolha saida/dataset${numeroDoNome(novo.txt.nome) ?? 'N'}.json.` });
+    } catch (err) {
+      progresso(null);
+      est = novoEstado('vazio');
+      mensagens([...msgs, { tipo: 'erro', titulo: 'Não foi possível carregar:', texto: err.message }]);
+      renderAnalise();
+      return;
+    }
+    progresso(null);
+    est = novo;
+    mensagens(msgs);
+    aplicarFiltros();
+  }
+
+  function carregarExemplo() {
+    est = novoEstado('exemplo');
+    est.json = { nome: EXEMPLO.nome, tamanho: null, encontros: EXEMPLO.encontros, invalidos: [], duplicados: 0, total: 1 };
+    mensagens([{ tipo: 'aviso', titulo: 'Exemplo do enunciado.', texto: 'Use os botões 1 e 2 para abrir as posições e os encontros de um dataset real.' }]);
+    aplicarFiltros();
+  }
+
+  /* ---------- filtros e paginação ---------- */
+  const filtrosForm = el('filtros');
+  function lerFiltros() {
+    const tipos = new Set([...filtrosForm.querySelectorAll('input[name="tipo"]:checked')].map((i) => i.value));
+    const id = el('f-id').value.trim();
+    const ts = el('f-ts').value.trim();
+    const dmin = el('f-dmin').value === '' ? 0 : Number(el('f-dmin').value);
+    const dmax = el('f-dmax').value === '' ? LIMITE : Number(el('f-dmax').value);
+    return { tipos, id, ts, dmin, dmax, ordem: el('f-ordem').value };
+  }
+  function aplicarFiltros(manterSelecao) {
+    const base = est.json ? est.json.encontros : [];
+    const f = lerFiltros();
+    const selAnterior = est.filtrada[est.sel];
+    let lista = base.filter(
+      (e) => f.tipos.has(e.tipo) && (!f.id || e.monitoradosEncontro.some((x) => String(x) === f.id)) && (!f.ts || e.timestamp.startsWith(f.ts)) && e.distanciaMetros >= f.dmin && e.distanciaMetros <= f.dmax
+    );
+    if (f.ordem === 'dist-asc') lista = [...lista].sort((a, b) => a.distanciaMetros - b.distanciaMetros);
+    else if (f.ordem === 'dist-desc') lista = [...lista].sort((a, b) => b.distanciaMetros - a.distanciaMetros);
+    else lista = [...lista].sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0));
+    est.filtrada = lista;
+    const i = manterSelecao && selAnterior ? lista.indexOf(selAnterior) : -1;
+    est.sel = i >= 0 ? i : lista.length ? 0 : -1;
+    est.pagina = est.sel >= 0 ? Math.floor(est.sel / POR_PAGINA) : 0;
+    est.zoomM = null;
+    est.panX = est.panY = 0;
+    renderAnalise();
+  }
+  let atraso = null;
+  filtrosForm.addEventListener('input', () => { clearTimeout(atraso); atraso = setTimeout(() => aplicarFiltros(true), 150); });
+  filtrosForm.addEventListener('submit', (ev) => ev.preventDefault());
+  filtrosForm.addEventListener('reset', () => setTimeout(() => aplicarFiltros(true), 0));
+
+  /* ---------- perfis ---------- */
+  function perfil(id) {
+    const pe = est.txt && est.txt.pessoas.get(String(id));
+    if (!pe) return null;
+    if (pe.vitima) return `vítima, medida contra ${pe.restr.length ? pe.restr.join(', ') : '—'}`;
+    return pe.faccao ? `monitorado, facção ${pe.faccao}` : 'monitorado, sem facção';
+  }
+
+  /* ---------- render da análise ---------- */
+  function renderAnalise() {
+    renderArquivos();
+    renderIndicadores();
+    renderGraficos();
+    renderTabela();
+    renderMapa();
+  }
+
+  function renderArquivos() {
+    const linhas = [];
+    if (est.fonte === 'carregando') linhas.push(h('div', null, h('strong', null, 'Carregando…')));
+    if (est.json) linhas.push(h('div', null, h('strong', null, 'Encontros:'), ` ${est.json.nome}`, est.json.tamanho !== null ? ` · ${fmtBytes(est.json.tamanho)}` : '', ` · ${fmt(est.json.total)} registro(s)`));
+    if (est.txt) linhas.push(h('div', null, h('strong', null, 'Posições:'), ` ${est.txt.nome} · ${fmtBytes(est.txt.tamanho)} · ${fmt(est.txt.stats.validas)} linhas válidas${est.txt.filtrado ? ' (só os timestamps com encontro ficaram na memória)' : ''}`));
+    if (est.fonte === 'vazio') linhas.push(h('div', { class: 'vazio' }, 'Nenhum dado carregado.'));
+    trocar(el('arquivos'), linhas);
+  }
+
+  function indicador(valor, rotulo, origem, classe) {
+    return h('div', { class: `ind ${classe || ''}` }, h('span', { class: 'v' }, valor), h('span', { class: 'r' }, rotulo), origem ? h('span', { class: 'o' }, origem) : null);
+  }
+  function relatorioDoDataset() {
+    if (!relatorio || relatorioOrigem === 'padrao' && !est.json) return null;
+    const n = numeroDoNome((est.json && est.json.nome) || (est.txt && est.txt.nome) || '');
+    if (n === null || !relatorio.datasets) return null;
+    return relatorio.datasets.find((d) => d.dataset === n && !d.erro) || null;
+  }
+  function renderIndicadores() {
+    const alvo = el('indicadores');
+    if (!est.json && !est.txt) { trocar(alvo); return; }
+    const enc = est.json ? est.json.encontros : null;
+    const cont = { protetiva: 0, faccao: 0, generico: 0 };
+    if (enc) for (const e of enc) cont[e.tipo]++;
+    const rel = relatorioDoDataset();
+    const traco = '—';
+    const origemRel = rel ? (relatorioOrigem === 'padrao' ? 'relatório do ambiente de dev.' : relatorioOrigem) : 'abra relatorio-execucao.json';
+    const fb = est.txt ? est.txt.paresForcaBruta : rel ? rel.pares.forcaBruta : null;
+    trocar(
+      alvo,
+      indicador(est.txt ? fmt(est.txt.stats.validas) : traco, 'Posições', est.txt ? 'do TXT' : 'abra o TXT'),
+      indicador(est.txt ? fmt(est.txt.pessoas.size) : traco, 'Pessoas', est.txt ? 'do TXT' : 'abra o TXT'),
+      indicador(est.txt ? fmt(est.txt.timestamps) : traco, 'Timestamps', est.txt ? 'do TXT' : 'abra o TXT'),
+      indicador(enc ? fmt(enc.length) : traco, 'Encontros', enc ? 'do JSON' : 'abra o JSON'),
+      indicador(enc ? fmt(cont.generico) : traco, 'Genéricos', null, 'generico'),
+      indicador(enc ? fmt(cont.faccao) : traco, 'Facção', null, 'faccao'),
+      indicador(enc ? fmt(cont.protetiva) : traco, 'Protetivos', null, 'protetiva'),
+      indicador(fb !== null ? fmt(fb) : traco, 'Pares possíveis (força bruta)', est.txt ? 'calculado do TXT' : origemRel),
+      indicador(rel ? fmt(rel.pares.candidatos) : traco, 'Pares avaliados pela grade', origemRel),
+      indicador(rel && rel.pares.forcaBruta ? `${fmt(rel.pares.forcaBruta - rel.pares.candidatos)}` : traco, 'Comparações evitadas', origemRel),
+      indicador(rel ? `${fmt(rel.tempos.mediaMs, 1)} ms` : traco, 'Tempo de processamento', origemRel)
+    );
+  }
+
+  function renderGraficos() {
+    const alvo = el('graficos');
+    const lista = est.filtrada;
+    if (!est.json || !lista.length) { trocar(alvo); return; }
+    const cor = { protetiva: css('--pro'), faccao: css('--fac'), generico: css('--gen') };
+    const cont = { protetiva: 0, faccao: 0, generico: 0 };
+    for (const e of lista) cont[e.tipo]++;
+    const porTipo = graficoBarras({
+      titulo: 'Distribuição por tipo',
+      itens: TIPOS.map((t) => ({ rotulo: t, valores: { v: cont[t] } })),
+      series: [{ chave: 'v', rotulo: 'encontros', cor: css('--ink') }],
+    });
+
+    // distâncias: 10 faixas de 2 m
+    const faixas = Array.from({ length: 10 }, () => 0);
+    for (const e of lista) faixas[Math.min(9, Math.floor(e.distanciaMetros / 2))]++;
+    const dist = histograma('Distribuição das distâncias', faixas, (i) => `${i * 2}–${i * 2 + 2} m`, '0 m', '20 m', 'Quantos encontros em cada faixa de 2 m.');
+
+    // ao longo do tempo: até 40 faixas entre o primeiro e o último timestamp
+    const tempos = lista.map((e) => Date.parse(e.timestamp.replace(' ', 'T') + 'Z'));
+    const t0 = Math.min(...tempos);
+    const t1 = Math.max(...tempos);
+    const nf = t1 === t0 ? 1 : Math.min(40, lista.length);
+    const passo = (t1 - t0) / nf || 1;
+    const porTempo = Array.from({ length: nf }, () => 0);
+    for (const t of tempos) porTempo[Math.min(nf - 1, Math.floor((t - t0) / passo))]++;
+    const iso = (t) => new Date(t).toISOString().replace('T', ' ').slice(0, 19);
+    const evol = histograma('Encontros ao longo do tempo', porTempo, (i) => `${iso(t0 + i * passo)} a ${iso(t0 + (i + 1) * passo)}`, iso(t0), iso(t1), `${nf} faixa(s) de tempo entre o primeiro e o último encontro filtrado.`);
+    trocar(alvo, porTipo, evol, dist);
+  }
+
+  function histograma(titulo, valores, rotuloFaixa, rotIni, rotFim, nota) {
+    const larg = 360;
+    const alt = 120;
+    const base = alt - 22;
+    const max = Math.max(1, ...valores);
+    const bw = (larg - 20) / valores.length;
+    const svgEl = s('svg', { viewBox: `0 0 ${larg} ${alt}`, role: 'img', 'aria-label': titulo });
+    svgEl.append(s('line', { x1: 10, x2: larg - 10, y1: base + 0.5, y2: base + 0.5, stroke: css('--line') }));
+    valores.forEach((v, i) => {
+      const hh = (v / max) * (base - 14);
+      const r = s('rect', { x: 10 + i * bw + 1, y: base - hh, width: Math.max(1, bw - 2), height: hh, rx: 1.5, fill: css('--accent') });
+      r.append(s('title', null, `${rotuloFaixa(i)}: ${fmt(v)}`));
+      svgEl.append(r);
+    });
+    svgEl.append(s('text', { x: 10, y: alt - 6, 'font-size': 10, fill: css('--muted') }, rotIni));
+    svgEl.append(s('text', { x: larg - 10, y: alt - 6, 'font-size': 10, fill: css('--muted'), 'text-anchor': 'end' }, rotFim));
+    svgEl.append(s('text', { x: 10, y: 10, 'font-size': 10, fill: css('--muted') }, `máx. ${fmt(max)}`));
+    return h('div', { class: 'grafico' }, h('h3', null, titulo), svgEl, h('p', { class: 'nota' }, nota));
+  }
+
+  function mini(e) {
+    const [ia, ib] = e.monitoradosEncontro;
+    const A = e.posicoes[ia];
+    const B = e.posicoes[ib];
+    const dy = (B.lat - A.lat) * M_LAT;
+    const dx = (B.lon - A.lon) * M_LAT * Math.cos(A.lat * RAD);
+    const k = 22 / 20;
+    const svgEl = s('svg', { width: 52, height: 52, viewBox: '0 0 52 52', role: 'img', 'aria-label': `${ib} a ${fmt(Math.hypot(dx, dy), 1)} m de ${ia}` });
+    svgEl.append(
+      s('circle', { cx: 26, cy: 26, r: 22, fill: 'none', stroke: css('--line'), 'stroke-dasharray': '3 3' }),
+      s('line', { x1: 26, y1: 26, x2: 26 + dx * k, y2: 26 - dy * k, stroke: css(VAR_TIPO[e.tipo]), 'stroke-width': e.tipo === 'protetiva' ? 3.5 : 2, 'stroke-dasharray': e.tipo === 'faccao' ? '4 2' : null }),
+      s('circle', { cx: 26, cy: 26, r: 3.5, fill: css('--ink') }),
+      s('circle', { cx: 26 + dx * k, cy: 26 - dy * k, r: 3.5, fill: css('--muted') })
+    );
+    return svgEl;
+  }
+
+  function renderTabela() {
+    const tbody = el('tab-enc').tBodies[0];
+    const lista = est.filtrada;
+    const total = est.json ? est.json.encontros.length : 0;
+    const paginas = Math.max(1, Math.ceil(lista.length / POR_PAGINA));
+    est.pagina = Math.min(est.pagina, paginas - 1);
+    const ini = est.pagina * POR_PAGINA;
+    const fatia = lista.slice(ini, ini + POR_PAGINA);
+    trocar(
+      tbody,
+      fatia.length
+        ? fatia.map((e, k) => {
+            const i = ini + k;
+            const [a, b] = e.monitoradosEncontro;
+            const pa = perfil(a);
+            const pb = perfil(b);
+            return h(
+              'tr',
+              { tabindex: 0, 'data-i': i, 'aria-selected': i === est.sel ? 'true' : 'false' },
+              h('td', null, mini(e)),
+              h('td', null, chip(e.tipo)),
+              h('td', { class: 'num' }, String(a)),
+              h('td', { class: 'num' }, String(b)),
+              h('td', { class: 'mono' }, e.timestamp),
+              h('td', { class: 'num' }, `${e.distanciaMetros.toFixed(3)} m`),
+              h('td', { class: 'perfil' }, pa || pb ? [h('span', null, h('b', null, String(a)), `: ${pa || '?'}`), h('span', null, h('b', null, String(b)), `: ${pb || '?'}`)] : h('span', { class: 'fonte' }, 'abra o TXT'))
+            );
+          })
+        : [h('tr', null, h('td', { colspan: 7, class: 'vazio' }, est.json ? 'Nenhum encontro com esses filtros.' : 'Nenhum encontro carregado.'))]
+    );
+    el('tab-enc-legenda').textContent = est.json ? `${fmt(lista.length)} de ${fmt(total)} encontro(s) com os filtros atuais. Clique numa linha (ou use Enter) para ver no mapa.` : 'Nenhum encontro carregado.';
+    trocar(
+      el('paginacao'),
+      h('span', null, lista.length ? `Mostrando ${fmt(ini + 1)}–${fmt(Math.min(ini + POR_PAGINA, lista.length))} de ${fmt(lista.length)}` : ''),
+      h(
+        'span',
+        { class: 'controles' },
+        h('button', { type: 'button', disabled: est.pagina === 0, onclick: () => { est.pagina--; renderTabela(); } }, 'Página anterior'),
+        h('span', { class: 'fonte' }, `página ${est.pagina + 1} de ${paginas}`),
+        h('button', { type: 'button', disabled: est.pagina >= paginas - 1, onclick: () => { est.pagina++; renderTabela(); } }, 'Próxima página')
+      )
+    );
+  }
+  const tabEnc = el('tab-enc').tBodies[0];
+  function selecionarDaTabela(tr) {
+    if (!tr) return;
+    selecionar(Number(tr.dataset.i));
+    el('painel-real').scrollIntoView({ behavior: reduzir ? 'auto' : 'smooth', block: 'nearest' });
+  }
+  tabEnc.addEventListener('click', (ev) => selecionarDaTabela(ev.target.closest('tr[data-i]')));
+  tabEnc.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selecionarDaTabela(ev.target.closest('tr[data-i]')); }
+  });
+  function selecionar(i) {
+    if (!est.filtrada.length) return;
+    est.sel = Math.max(0, Math.min(est.filtrada.length - 1, i));
+    est.pagina = Math.floor(est.sel / POR_PAGINA);
+    est.zoomM = null;
+    est.panX = est.panY = 0;
+    renderTabela();
+    renderMapa();
+  }
+
+  /* ---------- mapa real ---------- */
+  const cvReal = el('mapa-real');
+  const ctxR = cvReal.getContext('2d');
+  const ESCALAS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+  function dimReal() {
+    const w = larguraCanvas(cvReal);
+    const dpr = window.devicePixelRatio || 1;
+    let hgt = Math.round(w * 0.62);
+    if (window.innerWidth > 900) hgt = Math.max(hgt, el('lado-real').offsetHeight);
+    cvReal.width = Math.round(w * dpr);
+    cvReal.height = Math.round(hgt * dpr);
+    cvReal.style.height = hgt + 'px';
+    ctxR.setTransform(dpr, 0, 0, dpr, 0, 0);
+    desenharReal();
+  }
+  function larguraAjustada(e) {
+    // enquadra o par com folga para o círculo de 20 m e alguns vizinhos
+    return Math.min(4000, Math.max(80, e.distanciaMetros * 4 + 60));
+  }
+  function desenharReal() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cvReal.width / dpr;
+    const hgt = cvReal.height / dpr;
+    const c = { ink: css('--ink'), muted: css('--muted'), line: css('--line'), surface: css('--surface'), pro: css('--pro') };
+    ctxR.setLineDash([]);
+    ctxR.fillStyle = c.surface;
+    ctxR.fillRect(0, 0, w, hgt);
+    const selo = el('selo-real');
+    const e = est.filtrada[est.sel];
+    if (!e) {
+      selo.textContent = '';
+      selo.className = 'selo';
+      ctxR.fillStyle = c.muted;
+      ctxR.font = '14px ' + css('--f-body');
+      ctxR.fillText(est.json ? 'Nenhum encontro com esses filtros.' : 'Abra um dataset para ver o mapa.', 20, 32);
+      cvReal.setAttribute('aria-label', 'Mapa vazio');
+      return { total: null, recorte: 0 };
+    }
+    selo.textContent = est.fonte === 'exemplo' ? 'Exemplo do enunciado' : 'Dados reais';
+    selo.className = `selo ${est.fonte === 'exemplo' ? '' : 'real'}`;
+    if (est.zoomM === null) est.zoomM = larguraAjustada(e);
+    const [ia, ib] = e.monitoradosEncontro;
+    const A = e.posicoes[ia];
+    const B = e.posicoes[ib];
+    const lat0 = (A.lat + B.lat) / 2;
+    const lon0 = (A.lon + B.lon) / 2;
+    const mLon = M_LAT * Math.cos(lat0 * RAD);
+    const sc = w / est.zoomM;
+    const P = (lat, lon) => [w / 2 + (lon - lon0) * mLon * sc + est.panX, hgt / 2 - (lat - lat0) * M_LAT * sc + est.panY];
+
+    // grade de referência e escala adaptativas
+    const passo = ESCALAS.find((m) => m * sc >= 40) || ESCALAS[ESCALAS.length - 1];
+    ctxR.strokeStyle = c.line;
+    ctxR.lineWidth = 1;
+    ctxR.beginPath();
+    const ox = (w / 2 + est.panX) % (passo * sc);
+    const oy = (hgt / 2 + est.panY) % (passo * sc);
+    for (let x = ox; x <= w; x += passo * sc) { ctxR.moveTo(Math.round(x) + 0.5, 0); ctxR.lineTo(Math.round(x) + 0.5, hgt); }
+    for (let y = oy; y <= hgt; y += passo * sc) { ctxR.moveTo(0, Math.round(y) + 0.5); ctxR.lineTo(w, Math.round(y) + 0.5); }
+    ctxR.stroke();
+    ctxR.fillStyle = c.surface;
+    ctxR.fillRect(8, hgt - 24, passo * sc + 60, 20);
+    ctxR.fillStyle = c.ink;
+    ctxR.fillRect(12, hgt - 14, passo * sc, 2);
+    ctxR.font = '11px ' + css('--f-mono');
+    ctxR.fillText(`${fmt(passo)} m`, 18 + passo * sc, hgt - 9);
+
+    const ids = new Set([String(ia), String(ib)]);
+    const grupo = est.txt ? est.txt.porTs.get(e.timestamp) || [] : null;
+    const info = { total: grupo ? grupo.length : null, recorte: 0 };
+    const rotular = est.zoomM <= 400;
+    if (grupo) {
+      for (const p of grupo) {
+        const [x, y] = P(p.lat, p.lon);
+        if (x < -8 || x > w + 8 || y < -8 || y > hgt + 8) continue;
+        info.recorte++;
+        if (ids.has(p.id)) continue;
+        const pe = est.txt.pessoas.get(p.id);
+        if (pe && pe.vitima) {
+          ctxR.strokeStyle = c.pro; ctxR.lineWidth = 2; ctxR.fillStyle = c.surface;
+          ctxR.beginPath(); ctxR.arc(x, y, 5, 0, Math.PI * 2); ctxR.fill(); ctxR.stroke();
+        } else {
+          ctxR.fillStyle = c.muted; ctxR.beginPath(); ctxR.arc(x, y, 4, 0, Math.PI * 2); ctxR.fill();
+        }
+        if (rotular) { ctxR.fillStyle = c.muted; ctxR.font = '10px ' + css('--f-mono'); ctxR.fillText(p.id, x + 6, y - 5); }
+      }
+    }
+    // outros encontros no mesmo timestamp (mais claros)
+    const base = est.json ? est.json.encontros : [];
+    ctxR.globalAlpha = 0.45;
+    for (const o of base) {
+      if (o === e || o.timestamp !== e.timestamp) continue;
+      const [oa, ob] = o.monitoradosEncontro;
+      const [x1, y1] = P(o.posicoes[oa].lat, o.posicoes[oa].lon);
+      const [x2, y2] = P(o.posicoes[ob].lat, o.posicoes[ob].lon);
+      tracoTipo(ctxR, o.tipo, 2);
+      ctxR.beginPath(); ctxR.moveTo(x1, y1); ctxR.lineTo(x2, y2); ctxR.stroke();
+    }
+    ctxR.globalAlpha = 1;
+    // o par selecionado
+    const cor = css(VAR_TIPO[e.tipo]);
+    const [ax, ay] = P(A.lat, A.lon);
+    const [bx, by] = P(B.lat, B.lon);
+    ctxR.setLineDash([]);
+    ctxR.fillStyle = cor + '1f';
+    ctxR.beginPath(); ctxR.arc(ax, ay, LIMITE * sc, 0, Math.PI * 2); ctxR.fill();
+    ctxR.setLineDash([5, 4]); ctxR.strokeStyle = cor; ctxR.lineWidth = 1.5; ctxR.stroke();
+    tracoTipo(ctxR, e.tipo, 3);
+    ctxR.beginPath(); ctxR.moveTo(ax, ay); ctxR.lineTo(bx, by); ctxR.stroke();
+    ctxR.setLineDash([]);
+    for (const [id, x, y] of [[ia, ax, ay], [ib, bx, by]]) {
+      const pe = est.txt && est.txt.pessoas.get(String(id));
+      if (pe && pe.vitima) {
+        ctxR.strokeStyle = c.pro; ctxR.lineWidth = 2.5; ctxR.fillStyle = c.surface;
+        ctxR.beginPath(); ctxR.arc(x, y, 6.5, 0, Math.PI * 2); ctxR.fill(); ctxR.stroke();
+      } else {
+        ctxR.fillStyle = c.ink; ctxR.beginPath(); ctxR.arc(x, y, 6, 0, Math.PI * 2); ctxR.fill();
+      }
+      ctxR.fillStyle = c.ink;
+      ctxR.font = '600 13px ' + css('--f-mono');
+      ctxR.fillText(String(id), x + 9, y - 8);
+    }
+    const texto = `${e.tipo} · ${fmt(e.distanciaMetros, 2)} m`;
+    ctxR.font = '500 12px ' + css('--f-mono');
+    const tw = ctxR.measureText(texto).width;
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    ctxR.fillStyle = c.surface;
+    ctxR.fillRect(mx + 8, my + 6, tw + 8, 18);
+    ctxR.fillStyle = cor;
+    ctxR.fillText(texto, mx + 12, my + 19);
+    cvReal.setAttribute('aria-label', `Mapa: encontro ${e.tipo} entre ${ia} e ${ib} em ${e.timestamp}, a ${fmt(e.distanciaMetros, 2)} m. Largura visível ${fmt(est.zoomM)} m.`);
+    return info;
+  }
+
+  function renderMapa() {
+    const info = desenharReal();
+    const lado = el('lado-real');
+    const n = est.filtrada.length;
+    const e = est.filtrada[est.sel];
+    if (!e) {
+      trocar(lado, h('div', { class: 'eyebrow' }, 'Encontro selecionado'), h('p', { class: 'vazio' }, est.json ? 'Nenhum encontro com esses filtros.' : 'Abra um dataset (.txt + .json) ou volte ao exemplo.'));
+      return;
+    }
+    const [ia, ib] = e.monitoradosEncontro;
+    trocar(
+      lado,
+      h('div', null, h('div', { class: 'eyebrow' }, `Encontro ${fmt(est.sel + 1)} de ${fmt(n)}`), h('div', { class: 'relogio', style: { marginTop: '4px' } }, `${ia} × ${ib} `, chip(e.tipo))),
+      h(
+        'dl',
+        { class: 'stats' },
+        h('dt', null, 'Timestamp'), h('dd', null, e.timestamp),
+        h('dt', null, 'Distância'), h('dd', { class: 'destaque' }, `${e.distanciaMetros.toFixed(3)} m`),
+        h('dt', null, 'Pessoas neste timestamp'), h('dd', null, info.total === null ? '—' : fmt(info.total)),
+        h('dt', null, 'No recorte visível'), h('dd', null, info.total === null ? '—' : fmt(info.recorte)),
+        h('dt', null, 'Largura visível'), h('dd', null, `${fmt(est.zoomM)} m`)
+      ),
+      h('div', { class: 'perfil' }, h('span', null, h('b', null, String(ia)), `: ${perfil(ia) || 'abra o TXT para ver o perfil'}`), h('span', null, h('b', null, String(ib)), `: ${perfil(ib) || 'abra o TXT para ver o perfil'}`)),
+      h('div', { class: 'controles' }, h('button', { type: 'button', disabled: est.sel === 0, onclick: () => selecionar(est.sel - 1) }, 'Anterior'), h('button', { type: 'button', disabled: est.sel >= n - 1, onclick: () => selecionar(est.sel + 1) }, 'Próximo')),
+      h('span', { class: 'fonte' }, est.fonte === 'exemplo' ? 'Fonte: exemplo do enunciado (só as duas pessoas).' : `Fonte: ${[est.txt && est.txt.nome, est.json && est.json.nome].filter(Boolean).join(' + ')}.`)
+    );
+  }
+
+  // zoom e arraste
+  function zoom(fator) {
+    const e = est.filtrada[est.sel];
+    if (!e) return;
+    if (est.zoomM === null) est.zoomM = larguraAjustada(e);
+    est.zoomM = Math.min(20000, Math.max(20, est.zoomM * fator));
+    renderMapa();
+  }
+  el('z-mais').addEventListener('click', () => zoom(1 / 1.6));
+  el('z-menos').addEventListener('click', () => zoom(1.6));
+  el('z-ajustar').addEventListener('click', () => { est.zoomM = null; est.panX = est.panY = 0; renderMapa(); });
+  cvReal.addEventListener('wheel', (ev) => {
+    if (!ev.ctrlKey && !ev.metaKey) return; // sem Ctrl a roda continua rolando a página
+    ev.preventDefault();
+    zoom(ev.deltaY < 0 ? 1 / 1.25 : 1.25);
+  }, { passive: false });
+  let arraste = null;
+  cvReal.addEventListener('pointerdown', (ev) => { arraste = { x: ev.clientX, y: ev.clientY, px: est.panX, py: est.panY }; cvReal.setPointerCapture(ev.pointerId); });
+  cvReal.addEventListener('pointermove', (ev) => {
+    if (!arraste) return;
+    est.panX = arraste.px + (ev.clientX - arraste.x);
+    est.panY = arraste.py + (ev.clientY - arraste.y);
+    desenharReal();
+  });
+  const soltar = () => { if (arraste) { arraste = null; renderMapa(); } };
+  cvReal.addEventListener('pointerup', soltar);
+  cvReal.addEventListener('pointercancel', soltar);
+  cvReal.addEventListener('keydown', (ev) => {
+    const mapa = { '+': () => zoom(1 / 1.6), '=': () => zoom(1 / 1.6), '-': () => zoom(1.6), 0: () => el('z-ajustar').click(), ArrowLeft: () => (est.panX += 30), ArrowRight: () => (est.panX -= 30), ArrowUp: () => (est.panY += 30), ArrowDown: () => (est.panY -= 30), PageDown: () => selecionar(est.sel + 1), PageUp: () => selecionar(est.sel - 1) };
+    const f = mapa[ev.key];
+    if (!f) return;
+    ev.preventDefault();
+    f();
+    renderMapa();
+  });
+
+  // carregar arquivos
+  for (const id of ['arquivo-txt', 'arquivo-json']) el(id).addEventListener('change', (ev) => { abrir(ev.target.files); ev.target.value = ''; });
+  const drop = el('drop');
+  ['dragenter', 'dragover'].forEach((n) => drop.addEventListener(n, (ev) => { ev.preventDefault(); drop.classList.add('ativo'); }));
+  ['dragleave', 'drop'].forEach((n) => drop.addEventListener(n, (ev) => { ev.preventDefault(); drop.classList.remove('ativo'); }));
+  drop.addEventListener('drop', (ev) => abrir(ev.dataTransfer.files));
+  el('b-exemplo').addEventListener('click', () => { filtrosForm.reset(); carregarExemplo(); });
+  el('b-limpar').addEventListener('click', () => {
+    est = novoEstado('vazio');
+    filtrosForm.reset();
+    mensagens([{ tipo: 'aviso', titulo: 'Dados removidos.', texto: 'Abra novos arquivos ou volte ao exemplo.' }]);
+    aplicarFiltros();
+  });
+
+  /* ================= início ================= */
+  function redesenharTudo() {
+    desenharSim();
+    renderResultados();
+    renderAnalise();
+  }
+  function redimensionar() {
+    dimSim();
+    dimReal();
+  }
+  window.addEventListener('resize', redimensionar);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', redesenharTudo);
+  new MutationObserver(redesenharTudo).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  if (document.fonts) document.fonts.ready.then(() => { redimensionar(); renderMapa(); });
+
+  calcular();
+  renderResultados();
+  carregarExemplo();
+  painelSim();
+  redimensionar();
+  atualizarPlay();
+})();
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,9 @@
+node_modules/
+logs/
+relatorios/
+# datasets oficiais são grandes (até 640 MB); não versionar
+dados/*.txt
+dados/*.json
+!dados/.gitkeep
+*.tmp
+.*.tmp
